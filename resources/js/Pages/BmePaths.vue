@@ -8,7 +8,7 @@ import Welcome from '@/Components/Welcome.vue';
         <template #header>
             <div class="bg-[#014061] p-4">
                 <h2 class="font-semibold text-xl text-white leading-tight text-center">
-                    Dashboard
+                    BmePaths
                 </h2>
             </div>
         </template>
