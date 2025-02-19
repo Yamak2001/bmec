@@ -5,3 +5,16 @@
 [x-cloak] {
     display: none;
 }
+:root {
+    --dark-blue: #014061;
+    --blue: #0349AC;
+    --light-blue: #6BACC8;
+    --baby-blue: #E3F5FF;
+    --white: #FFFFFF;
+    --correct-green: #28a745;
+    --present-yellow: #F2C94C;
+    --absent-grey: #9B9B9B;
+    --key-default-bg: var(--light-blue);
+    --key-absent-bg: #FF6B6B;
+  }
+  

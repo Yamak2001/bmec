@@ -1,6 +1,6 @@
 <script setup>
 import AppLayout from '@/Layouts/AppLayout.vue';
-import Welcome from '@/Components/Welcome.vue';
+import Bmedle from '@/Components/Bmedle.vue';
 </script>
 
 <template>
@@ -15,7 +15,7 @@ import Welcome from '@/Components/Welcome.vue';
         <div class="py-12">
             <div class="max-w-screen-2xl mx-auto sm:px-6 lg:px-8">
                 <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
-                    <Welcome />
+                    <Bmedle />
                 </div>
             </div>
         </div>

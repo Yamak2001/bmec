@@ -3,6 +3,13 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Models\BmecWorldeTerm;
+use App\Http\Controllers\BmedleController;
+
+Route::get('/bmedle', [BmedleController::class, 'show'])->name('bmedle.show');
+Route::post('/bmedle/store', [BmedleController::class, 'store'])->name('bmedle.store');
+Route::put('/bmedle/{bmedleAttempt}/update', [BmedleController::class, 'update'])->name('bmedle.update');
+Route::patch('/bmedle/{bmedleAttempt}/hint', [BmedleController::class, 'useHint'])->name('bmedle.useHint');
 
 /*
 |--------------------------------------------------------------------------
@@ -70,8 +77,18 @@ Route::get('/', function () {
  * Vue components you have in your project.
  */
 Route::get('/bmedle', function () {
-    return Inertia::render('Bmedle');
+    $attempt = [
+        'started_at' => null,
+        'hint_used'  => false,
+        // add any other data you need
+    ];
+
+    // Return an Inertia page called "bmedle" with props
+    return Inertia::render('Bmedle', [
+        'attempt' => $attempt,
+    ]);
 })->name('bmedle');
+
 
 Route::get('/meddebate', function () {
     return Inertia::render('MedDebate');
