@@ -3,13 +3,6 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Models\BmecWorldeTerm;
-use App\Http\Controllers\BmedleController;
-
-Route::get('/bmedle', [BmedleController::class, 'show'])->name('bmedle.show');
-Route::post('/bmedle/store', [BmedleController::class, 'store'])->name('bmedle.store');
-Route::put('/bmedle/{bmedleAttempt}/update', [BmedleController::class, 'update'])->name('bmedle.update');
-Route::patch('/bmedle/{bmedleAttempt}/hint', [BmedleController::class, 'useHint'])->name('bmedle.useHint');
 
 /*
 |--------------------------------------------------------------------------
@@ -59,15 +52,25 @@ Route::get('/', function () {
  * Uncomment the following middleware group when you're ready to protect these
  * routes with authentication (e.g., using Sanctum and Jetstream's auth_session).
  */
-// Route::middleware([
-//     'auth:sanctum',
-//     config('jetstream.auth_session'),
-//     'verified',
-// ])->group(function () {
-//     Route::get('/dashboard', function () {
-//         return Inertia::render('Dashboard');
-//     })->name('dashboard');
-// });
+Route::middleware([
+    'auth:sanctum',
+    config('jetstream.auth_session'),
+    'verified',
+])->group(function () {
+    Route::get('/dashboard', function () {
+        return Inertia::render('Dashboard');
+    })->name('dashboard');
+});
+
+Route::middleware([
+    'auth:sanctum',
+    config('jetstream.auth_session'),
+    'verified',
+])->group(function () {
+    Route::get('/bmedle', function () {
+        return Inertia::render('Bmedle');
+    })->name('bmedle');
+});
 
 /**
  * Public Inertia Routes
@@ -76,19 +79,9 @@ Route::get('/', function () {
  * components using Inertia. Replace the component names with the corresponding
  * Vue components you have in your project.
  */
-Route::get('/bmedle', function () {
-    $attempt = [
-        'started_at' => null,
-        'hint_used'  => false,
-        // add any other data you need
-    ];
-
-    // Return an Inertia page called "bmedle" with props
-    return Inertia::render('Bmedle', [
-        'attempt' => $attempt,
-    ]);
-})->name('bmedle');
-
+// Route::get('/bmedle', function () {
+//     return Inertia::render('Bmedle');
+// })->name('bmedle');
 
 Route::get('/meddebate', function () {
     return Inertia::render('MedDebate');

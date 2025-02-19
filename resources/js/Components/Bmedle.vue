@@ -6,10 +6,10 @@
     </header>
 
     <main class="game-main">
-      <!-- Example top bar with Start Game, Hint, Timer -->
+      <!-- Top Bar -->
       <div class="top-bar">
         <button v-if="!hasStarted" @click="startGame">Start Game</button>
-        <button v-else-if="!attempt.hint_used" @click="useHint">Hint</button>
+        <button v-else-if="attemptData && !attemptData.hint_used" @click="useHint">Hint</button>
         <p v-if="hasStarted">
           Timer: {{ timeElapsed }} seconds
         </p>
@@ -52,89 +52,101 @@
 </template>
 
 <script setup>
+import axios from 'axios';
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
-// import { Inertia } from '@inertiajs/inertia';
 
-// Props from controller
-const props = defineProps({
-  attempt: {
-    type: Object,
-    required: true,
-  },
-});
-console.log('props.attempt = ', props.attempt);
-
-// Basic puzzle settings
+/** Local puzzle settings */
 const totalRows = 6;
 const totalCols = 5;
 
-// Local state for the puzzle board
+/** Puzzle board */
 const board = reactive(Array.from({ length: totalRows }, () => Array(totalCols).fill('')));
 const boardStatus = reactive(Array(totalRows).fill(null));
 
-// Virtual keyboard states
+/** Virtual keyboard */
 const keyboardStatus = reactive({});
 const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 alphabet.forEach(letter => {
   keyboardStatus[letter] = 'default';
 });
-
-// Keyboard layout
 const keyboardRows = [
   'QWERTYUIOP'.split(''),
   'ASDFGHJKL'.split(''),
-  ['Enter', ...'ZXCVBNM'.split(''), '←'],
+  ['Enter', ...'ZXCVBNM'.split(''), '←']
 ];
 
-// Track current row/col
+// State
 const currentRow = ref(0);
 const currentCol = ref(0);
-
-// Timer
+const attemptData = ref(null);
+const hasStarted = ref(false);
 const timeElapsed = ref(0);
 let timerInterval = null;
 
-// Determine if user has started
-// e.g. if attempt has a started_at set
-const hasStarted = ref(!!props.attempt.started_at);
+onMounted(() => {
+  console.log('Bmedle mounted!');
+});
 
-/**
- * Start the game: 
- *  - If not started, call server to set started_at in attempt
- *  - Start local timer
- */
-function startGame() {
+onUnmounted(() => {
+  stopTimer();
+});
+
+/** Start Game => POST /api/bmedle/start */
+async function startGame() {
   if (hasStarted.value) return;
 
-  Inertia.post(route('bmedle.store'), {
-    // Or if you have a separate route to mark the existing attempt started,
-    // you'd do something like:
-    // attemptId: props.attempt.id
-  }, {
-    onSuccess: () => {
-      hasStarted.value = true;
-      startTimer();
+  try {
+    const response = await axios.post('/api/bmedle/start');
+    attemptData.value = response.data.attempt;
+    hasStarted.value = true;
+    startTimer();
+  } catch (error) {
+    console.error('Failed to start the game:', error);
+  }
+}
+
+/** Use Hint => PATCH /api/bmedle/attempts/{id}/hint */
+async function useHint() {
+  if (!attemptData.value) return;
+
+  try {
+    const { id } = attemptData.value;
+    const response = await axios.patch(`/api/bmedle/attempts/${id}/hint`);
+    attemptData.value = response.data.attempt;
+  } catch (error) {
+    console.error('Failed to apply hint:', error);
+  }
+}
+
+/** Submit Guess => POST /api/bmedle/attempts/{id}/guess */
+async function submitGuess() {
+  const guess = board[currentRow.value].join('');
+  if (guess.length !== totalCols) return;
+
+  try {
+    const { id } = attemptData.value;
+    const response = await axios.post(`/api/bmedle/attempts/${id}/guess`, { guess });
+    attemptData.value = response.data.attempt;
+
+    // Move row pointer forward
+    if (currentRow.value < totalRows - 1) {
+      currentRow.value++;
+      currentCol.value = 0;
+    } else {
+      stopTimer();
     }
-  });
+  } catch (error) {
+    if (error.response?.status === 422) {
+      console.error('Not a valid word');
+    } else {
+      console.error('Failed to submit guess:', error);
+    }
+  }
 }
 
-/**
- * Use a hint: calls server to mark hint_used = true
- */
-function useHint() {
-  Inertia.patch(route('bmedle.useHint', props.attempt.id));
-}
-
-/**
- * Called after the user has started (or page load if started_at not null).
- * It sets up an interval to increment timeElapsed every second.
- * You can compare the attempt's started_at with the current time if you want more accurate measure.
- */
+/** Timer controls */
 function startTimer() {
-  // If attempt.already has a started_at, you can compute offset
-  // For now just do timeElapsed from zero
   timeElapsed.value = 0;
-
   timerInterval = setInterval(() => {
     timeElapsed.value += 1;
   }, 1000);
@@ -147,25 +159,9 @@ function stopTimer() {
   }
 }
 
-// If the attempt is already started, resume the timer
-onMounted(() => {
-  if (hasStarted.value) {
-    startTimer();
-  }
-});
-
-onUnmounted(() => {
-  stopTimer();
-});
-
-/**
- * Handle keyboard input
- */
+/** Keyboard input */
 function handleKey(key) {
-  if (!hasStarted.value) {
-    // If not started, ignore
-    return;
-  }
+  if (!hasStarted.value || !attemptData.value) return;
 
   if (key === 'Enter') {
     if (currentCol.value === totalCols) {
@@ -173,6 +169,7 @@ function handleKey(key) {
     }
     return;
   }
+
   if (key === '←') {
     if (currentCol.value > 0) {
       currentCol.value--;
@@ -181,7 +178,6 @@ function handleKey(key) {
     return;
   }
 
-  // Process only A-Z
   if (/^[A-Z]$/.test(key)) {
     if (currentCol.value < totalCols) {
       board[currentRow.value][currentCol.value] = key;
@@ -190,43 +186,7 @@ function handleKey(key) {
   }
 }
 
-/**
- * Submits the guess to the server, which updates the attempt 
- * with next attempt_x field, checks if correct, sets status, etc.
- */
-function submitGuess() {
-  const guess = board[currentRow.value].join('');
-  if (guess.length !== totalCols) return;
-
-  Inertia.put(route('bmedle.update', props.attempt.id), {
-    guess: guess,
-  }, {
-    onSuccess: (page) => {
-      // The server might return new props that update attempt status, etc.
-      // If the puzzle is solved, or failed, you can stop the timer
-      // Or you'd re-fetch the puzzle state so you can color in board cells
-      // For simplicity, we do local check. But typically you'd do more logic
-      // For now we just move the row pointer forward
-      // In a real scenario, you'd update boardStatus based on server response
-      if (currentRow.value < totalRows - 1) {
-        currentRow.value++;
-        currentCol.value = 0;
-      } else {
-        stopTimer();
-      }
-    },
-    onError: (errors) => {
-      // If guess is not in dictionary, server might return 422
-      console.log(errors);
-      // Show an error message to the user
-    }
-  });
-}
-
-/**
- * For coloring the cell based on boardStatus 
- * (You'd typically get this from the server or do local logic)
- */
+/** Board coloring (placeholder) */
 function cellStatusClass(rowIndex, colIndex) {
   if (boardStatus[rowIndex]) {
     return boardStatus[rowIndex][colIndex] || 'default';
@@ -234,10 +194,7 @@ function cellStatusClass(rowIndex, colIndex) {
   return 'default';
 }
 
-/**
- * For coloring the keyboard key
- * (You'd typically set this after receiving server response)
- */
+/** Keyboard coloring (placeholder) */
 function keyboardKeyClass(key) {
   const status = keyboardStatus[key];
   if (status === 'correct') return 'key-correct';
@@ -248,8 +205,12 @@ function keyboardKeyClass(key) {
 </script>
 
 <style scoped>
-/* Example color variables. 
-   In a real app, put them in a global file or on the :root in a non-scoped style. */
+/* 
+  We'll set the default sizes for desktop, 
+  then use a media query for smaller screens.
+*/
+
+/* Container */
 .bmedle-game {
   background-color: var(--dark-blue);
   color: var(--white);
@@ -271,16 +232,17 @@ function keyboardKeyClass(key) {
   font-size: 2rem;
 }
 
-/* Main content area */
+/* Main Content Area */
 .game-main {
   flex: 1;
   width: 100%;
-  max-width: 800px;
+  max-width: 800px; /* limit the game width on large screens */
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
+/* Top Bar */
 .top-bar {
   display: flex;
   gap: 20px;
@@ -288,31 +250,31 @@ function keyboardKeyClass(key) {
   align-items: center;
 }
 
-/* Board styling */
+/* Board (Desktop Defaults) */
 .board {
   display: grid;
-  grid-template-rows: repeat(6, 70px);
-  gap: 10px;
+  grid-template-rows: repeat(6, 60px); /* decreased from 70px to 60px */
+  gap: 8px; /* slightly smaller gap */
   margin-bottom: 20px;
 }
 
 .board-row {
   display: grid;
-  grid-template-columns: repeat(5, 70px);
-  gap: 10px;
+  grid-template-columns: repeat(5, 60px); /* decreased from 70px to 60px */
+  gap: 8px;
 }
 
 .board-cell {
   border: 2px solid var(--white);
   background-color: var(--white);
   color: var(--dark-blue);
-  font-size: 2rem;
+  font-size: 1.8rem; /* slightly smaller than 2rem */
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Board cell states */
+/* Board Cell States */
 .board-cell.default {
   background-color: var(--white);
 }
@@ -325,11 +287,30 @@ function keyboardKeyClass(key) {
   color: var(--white);
 }
 .board-cell.absent {
-  background-color: var(--absent-grey);
+  background-color: var(--key-absent-bg);
   color: var(--white);
 }
 
-/* Keyboard styling */
+/* 
+  Responsive Breakpoint: For screens below 640px, 
+  further reduce cell sizes for mobile.
+*/
+@media (max-width: 640px) {
+  .board {
+    grid-template-rows: repeat(6, 40px); /* shrinks to 40px squares */
+    gap: 6px;
+  }
+  .board-row {
+    grid-template-columns: repeat(5, 40px);
+    gap: 6px;
+  }
+  .board-cell {
+    font-size: 1.4rem; /* smaller text on mobile */
+  }
+}
+
+
+/* Keyboard */
 .keyboard {
   display: flex;
   flex-direction: column;
@@ -337,7 +318,7 @@ function keyboardKeyClass(key) {
 }
 .keyboard-row {
   display: flex;
-  gap: 6px;
+  gap: 8px; /* a bit more space for desktop */
   justify-content: center;
 }
 .keyboard-key {
@@ -368,5 +349,35 @@ function keyboardKeyClass(key) {
   text-align: center;
   padding: 20px;
   font-size: 0.9rem;
+}
+
+/* 
+  Responsive Breakpoint: 
+  For screens up to ~640px, scale down board and keyboard
+*/
+@media (max-width: 640px) {
+  .game-main {
+    max-width: 90%; /* reduce horizontal max to fit smaller screens */
+  }
+  
+  .board {
+    gap: 6px;
+  }
+  .board-row {
+    gap: 6px;
+    /* reduce from 70px to ~50px wide cells on small screens */
+    grid-template-columns: repeat(5, 50px);
+  }
+  .board-cell {
+    font-size: 1.5rem;
+  }
+
+  .keyboard-row {
+    gap: 5px;
+  }
+  .keyboard-key {
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
 }
 </style>
